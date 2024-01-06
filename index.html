@@ -1,0 +1,167 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+
+  <title>Jiuchi Metronome</title>
+  <meta name="description" content="Yamatai Metronome">
+  <meta name="author" content="Lindsay Fei">
+
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+</head>
+<body>
+  <div class="jumbotron">
+        <center>
+            <h1 class="display-4">Jiuchi Metronome</h1>
+        </center>
+    </div>
+    <div class="m-5">
+        <center>
+            <div class="input-group">
+                <div class="input-group-prepend">
+                  <span class="input-group-text">TEMPO (bpm)</span>
+                </div>
+                <input id="tempo" type="number" class="form-control form-control-lg" value="100">
+                <div class="input-group-prepend">
+                  <span class="input-group-text">FREQUENCY (Hz)</span>
+                </div>
+                <input id="frequency" type="number" class="form-control form-control-lg" value="1000">
+                <div class="input-group-append">
+                    <button id="straight" type="button" class="btn btn-outline-secondary">Straight Notes</button>
+                    <button id="horsebeat" type="button" class="btn btn-outline-secondary">Horsebeat</button>
+                    <button id="swing" type="button" class="btn btn-outline-secondary">Swing</button>
+                    <button id ="stopMetronome" type="button" class="btn btn-danger">Stop</button>
+                </div>
+            </div>
+        </center>
+    </div>
+<script>
+let metronome;
+
+document.getElementById('straight').onclick = () => start('straight');
+document.getElementById('horsebeat').onclick = () => start('horsebeat');
+document.getElementById('swing').onclick = () => start('swing');
+document.getElementById('stopMetronome').onclick = () => stop();
+
+async function start(whichMetronome) {
+  return new Promise((resolve, reject) => {
+    stop()
+    const TEMPO = parseFloat(document.getElementById('tempo').value);
+    const FREQ = parseFloat(document.getElementById('frequency').value)
+
+    switch(whichMetronome) {
+      case 'straight':
+        metronome = new StraightMetronome(TEMPO, FREQ);
+        break;
+      case 'horsebeat':
+        metronome = new HorseBeatMetronome(TEMPO, FREQ);
+        break;
+      case 'swing':
+        metronome = new SwingMetronome(TEMPO, FREQ);
+        break;
+    }
+
+    metronome.start();
+  });
+}
+
+function stop() {
+    if (metronome) {
+        metronome.stop();
+    }
+}
+
+class BaseMetronome {
+  constructor(tempo, freq, ticks=1000) {
+    this.tempo = tempo;
+    this.playing = false;
+    this.scheduledTicks = ticks
+    
+    this.audioCtx = null;
+    this.tick = null;
+    this.tickVolume = null;
+    this.soundHz = freq;
+  }
+  
+  initAudio() {
+    this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    this.tick = this.audioCtx.createOscillator();
+    this.tickVolume = this.audioCtx.createGain();
+
+    this.tick.type = 'sine'; 
+    this.tick.frequency.value = this.soundHz;
+    this.tickVolume.gain.value = 0;
+    
+    this.tick.connect(this.tickVolume);
+    this.tickVolume.connect(this.audioCtx.destination);
+    this.tick.start(.01); //offset
+  }
+  
+  clickAtTime(time) {
+    this.tickVolume.gain.cancelScheduledValues(time);
+    this.tickVolume.gain.setValueAtTime(0, time);
+
+    this.tickVolume.gain.linearRampToValueAtTime(1, time + .001);
+    this.tickVolume.gain.linearRampToValueAtTime(0, time + .001 + .01);
+  }
+  
+  start(callbackFn) {
+    this.playing = true;
+    this.initAudio();
+  }
+  
+  stop() {
+    this.playing = false;
+    this.tickVolume.gain.value = 0;
+    this.audioCtx.close();
+  }
+}
+
+class StraightMetronome extends BaseMetronome {
+  start() {
+    super.start();
+    const timeoutDuration = (60 / this.tempo);
+    let now = this.audioCtx.currentTime;
+      
+    for (let i = 0; i < this.scheduledTicks; i++) {
+      this.clickAtTime(now);
+      now += timeoutDuration;
+    }
+  }
+}
+
+class HorseBeatMetronome extends BaseMetronome {
+  start() {
+    super.start();
+    const timeoutDuration = (60 / this.tempo);
+    
+    let eighth = 0;
+    let now = this.audioCtx.currentTime;
+      
+    for (let i = 0; i < this.scheduledTicks; i++) {
+      this.clickAtTime(now);
+      now += (eighth != 1) ? (timeoutDuration/2.) : timeoutDuration;
+      eighth = (eighth + 1) % 3;
+    }
+  }
+}
+
+class SwingMetronome extends BaseMetronome {
+  start() {
+    super.start();
+    const timeoutDuration = (60 / this.tempo);
+    
+    let third = true;
+    let now = this.audioCtx.currentTime;
+      
+    for (let i = 0; i < this.scheduledTicks; i++) {
+      this.clickAtTime(now);
+      now += (third) ? (timeoutDuration/3.) : (2.*timeoutDuration/3.);
+      third = !third;
+    }
+  }
+}
+</script>
+</body>
+</html>
